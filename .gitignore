@@ -1,0 +1,6 @@
+# Ignore specific files
+connection.txt
+hello_world.py
+
+# Ignore virtual environment
+.venv/
