@@ -14,7 +14,7 @@ If you just want to get up and running quickly, you can import the complete agen
 3.  Select the `watsonx data and ai agentic example.json` file from this project's directory.
 4.  Once imported, you will need to update two components with your specific credentials:
     *   **IBM watsonx.data Presto Tool**: Fill in your Presto `Connection Config (JSON)`.
-    *   **Agent**: Provide your `watsonx API Key` and select your desired model.
+    *   **IBM watsonx.ai**: Provide your credentials for the language model. You will need to fill in the `watsonx API Endpoint`, `watsonx Project ID`, and `API Key` fields.
 5.  If your watsonx.data instance uses a custom SSL certificate, follow the **Handling SSL Certificates** guide below.
 6.  You can then run the flow and begin chatting with your data.
 
