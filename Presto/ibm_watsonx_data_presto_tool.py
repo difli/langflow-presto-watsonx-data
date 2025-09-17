@@ -106,27 +106,25 @@ class IBMWatsonxDataPrestoTool(LCToolComponent):
     def _run_tool(self, sql_query: str) -> str:
         """Executes a SQL query on the Presto database and returns the result."""
         self.status = f"Executing query: {sql_query[:50]}..."
-        conn = None
-        try:
-            conn = self._get_connection()
-            cur = conn.cursor()
-            cur.execute(sql_query)
-            rows = cur.fetchall()
-            if not rows:
-                return "[]"
-            
-            columns = [desc[0] for desc in cur.description]
-            df = pd.DataFrame(rows, columns=columns)
-            
-            result_json = df.to_json(orient="records")
-            self.status = f"Query successful: {len(rows)} rows returned."
-            return result_json
+        conn = self._get_connection()
 
+        try:
+            cur = conn.cursor()
+            try:
+                cur.execute(sql_query)
+                rows = cur.fetchall()
+                columns = [desc[0] for desc in cur.description]
+            finally:
+                cur.close()
+            
+            df = pd.DataFrame(rows, columns=columns)
+            self.status = f"Query successful: {len(rows)} rows"
+            return df.to_json(orient="records")
         except Exception as e:
+            # Reset the connection on failure
+            self._connection = None
             self.status = f"Query failed: {e}"
-            # Return the error message to the agent so it can self-correct.
             return f"Error: Query failed with exception: {e}"
-        # The connection is cached, so we don't close it here.
 
     def build_tool(self) -> Tool:
         """Builds the StructuredTool from the component's inputs."""
