@@ -88,6 +88,7 @@
         "targetHandle": "{œfieldNameœ:œagent_llmœ,œidœ:œAgent-W7Latœ,œinputTypesœ:[œLanguageModelœ],œtypeœ:œstrœ}"
       },
       {
+        "animated": false,
         "className": "",
         "data": {
           "sourceHandle": {
@@ -108,6 +109,7 @@
           }
         },
         "id": "xy-edge__IBMWatsonxDataPrestoTool-WugYN{œdataTypeœ:œIBMWatsonxDataPrestoToolœ,œidœ:œIBMWatsonxDataPrestoTool-WugYNœ,œnameœ:œtoolœ,œoutput_typesœ:[œToolœ]}-Agent-W7Lat{œfieldNameœ:œtoolsœ,œidœ:œAgent-W7Latœ,œinputTypesœ:[œToolœ],œtypeœ:œotherœ}",
+        "selected": false,
         "source": "IBMWatsonxDataPrestoTool-WugYN",
         "sourceHandle": "{œdataTypeœ:œIBMWatsonxDataPrestoToolœ,œidœ:œIBMWatsonxDataPrestoTool-WugYNœ,œnameœ:œtoolœ,œoutput_typesœ:[œToolœ]}",
         "target": "Agent-W7Lat",
@@ -153,7 +155,7 @@
             ],
             "frozen": false,
             "icon": "bot",
-            "last_updated": "2025-09-11T09:43:20.224Z",
+            "last_updated": "2025-09-18T12:10:37.728Z",
             "legacy": false,
             "lf_version": "1.5.1",
             "metadata": {},
@@ -1593,6 +1595,8 @@
       },
       {
         "data": {
+          "description": "Creates a tool to run SQL queries on a Presto database.",
+          "display_name": "IBM watsonx.data Presto Tool",
           "id": "IBMWatsonxDataPrestoTool-WugYN",
           "node": {
             "base_classes": [
@@ -1624,6 +1628,8 @@
                 "group_outputs": false,
                 "method": "build_tool",
                 "name": "tool",
+                "options": null,
+                "required_inputs": null,
                 "selected": "Tool",
                 "tool_mode": true,
                 "types": [
@@ -1651,7 +1657,7 @@
                 "show": true,
                 "title_case": false,
                 "type": "code",
-                "value": "import json\nfrom typing import Type\n\nimport pandas as pd\nimport requests\nfrom langchain_core.tools import StructuredTool, Tool\nfrom pydantic import BaseModel, Field\nfrom prestodb import dbapi, auth\n\nfrom langflow.base.langchain_utilities.model import LCToolComponent\nfrom langflow.io import CodeInput, StrInput, Output\nfrom langflow.field_typing import Tool\nfrom langflow.schema.data import Data\n\n\nclass IBMWatsonxDataPrestoTool(LCToolComponent):\n    display_name = \"IBM watsonx.data Presto Tool\"\n    description = \"Creates a tool to run SQL queries on a Presto database.\"\n    icon = \"prestodb\"\n\n    _connection = None\n\n    inputs = [\n        CodeInput(\n            name=\"connection_config\",\n            display_name=\"Connection Config (JSON)\",\n            info=\"JSON with host, port, user, password, catalog, schema, and ssl_verify path.\",\n            value='{\\n  \"host\": \"your-presto-host\",\\n  \"port\": 12345,\\n  \"user\": \"your-user\",\\n  \"password\": \"your-password\",\\n  \"catalog\": \"your-catalog\",\\n  \"schema\": \"your-schema\",\\n  \"ssl_verify\": \"/path/to/your/cert.pem\"\\n}'\n        ),\n        StrInput(\n            name=\"tool_name\",\n            display_name=\"Tool Name\",\n            info=\"The name of the tool to be passed to the LLM.\",\n            value=\"presto_query_tool\",\n        ),\n        StrInput(\n            name=\"tool_description\",\n            display_name=\"Tool Description\",\n            info=\"Describe the tool to the LLM. This helps the agent decide when to use it.\",\n            value=\"Runs a SQL query on a Presto database and returns the result as a JSON string.\",\n        ),\n    ]\n\n    outputs = [\n        Output(display_name=\"Tool\", name=\"tool\", method=\"build_tool\"),\n    ]\n\n    def create_tool_schema(self) -> Type[BaseModel]:\n        \"\"\"Create a Pydantic model for the tool's arguments.\"\"\"\n\n        class PrestoQuerySchema(BaseModel):\n            sql_query: str = Field(..., description=\"The SQL query to execute on the Presto database.\")\n\n        return PrestoQuerySchema\n\n    def _get_connection(self):\n        \"\"\"Gets a cached connection or creates a new one.\"\"\"\n        if self._connection and self._connection.closed:\n             self._connection = None\n\n        if self._connection:\n            return self._connection\n\n        connection_config = self.connection_config\n        if isinstance(connection_config, str):\n            try:\n                config = json.loads(connection_config)\n            except json.JSONDecodeError as e:\n                raise ValueError(f\"Invalid JSON in connection config: {e}\")\n        elif isinstance(connection_config, dict):\n            config = connection_config\n        else:\n            raise TypeError(f\"Unsupported type for connection_config: {type(connection_config)}\")\n\n        host = config.get(\"host\")\n        port = config.get(\"port\")\n        user = config.get(\"user\")\n        password = config.get(\"password\")\n        catalog = config.get(\"catalog\")\n        schema = config.get(\"schema\")\n        ssl_verify_path = config.get(\"ssl_verify\")\n\n        if not all([host, port, user, catalog, schema, ssl_verify_path]):\n            raise ValueError(\"Connection config is missing required fields.\")\n\n        session = requests.Session()\n        session.verify = ssl_verify_path\n        session.trust_env = False\n\n        try:\n            conn = dbapi.connect(\n                host=host,\n                port=port,\n                user=user,\n                catalog=catalog,\n                schema=schema,\n                http_scheme='https',\n                auth=auth.BasicAuthentication(user, password) if password else None,\n                http_session=session,\n            )\n            self._connection = conn\n            return self._connection\n        except Exception as e:\n            raise RuntimeError(f\"Failed to connect to Presto: {e}\") from e\n\n    def _run_tool(self, sql_query: str) -> str:\n        \"\"\"Executes a SQL query on the Presto database and returns the result.\"\"\"\n        self.status = f\"Executing query: {sql_query[:50]}...\"\n        conn = None\n        try:\n            conn = self._get_connection()\n            cur = conn.cursor()\n            cur.execute(sql_query)\n            rows = cur.fetchall()\n            if not rows:\n                return \"[]\"\n            \n            columns = [desc[0] for desc in cur.description]\n            df = pd.DataFrame(rows, columns=columns)\n            \n            result_json = df.to_json(orient=\"records\")\n            self.status = f\"Query successful: {len(rows)} rows returned.\"\n            return result_json\n\n        except Exception as e:\n            self.status = f\"Query failed: {e}\"\n            # Return the error message to the agent so it can self-correct.\n            return f\"Error: Query failed with exception: {e}\"\n        # The connection is cached, so we don't close it here.\n\n    def build_tool(self) -> Tool:\n        \"\"\"Builds the StructuredTool from the component's inputs.\"\"\"\n        tool_schema = self.create_tool_schema()\n        \n        tool = StructuredTool.from_function(\n            name=self.tool_name,\n            description=self.tool_description,\n            func=self._run_tool,\n            args_schema=tool_schema,\n            return_direct=False,\n        )\n        \n        self.status = \"Presto DB Tool created\"\n        return tool\n"
+                "value": "import json\nfrom typing import Type\n\nimport pandas as pd\nimport requests\nfrom langchain_core.tools import StructuredTool, Tool\nfrom pydantic import BaseModel, Field\nfrom prestodb import dbapi, auth\n\nfrom langflow.base.langchain_utilities.model import LCToolComponent\nfrom langflow.io import CodeInput, StrInput, Output\nfrom langflow.field_typing import Tool\nfrom langflow.schema.data import Data\n\n\nclass IBMWatsonxDataPrestoTool(LCToolComponent):\n    display_name = \"IBM watsonx.data Presto Tool\"\n    description = \"Creates a tool to run SQL queries on a Presto database.\"\n    icon = \"prestodb\"\n\n    _connection = None\n\n    inputs = [\n        CodeInput(\n            name=\"connection_config\",\n            display_name=\"Connection Config (JSON)\",\n            info=\"JSON with host, port, user, password, catalog, schema, and ssl_verify path.\",\n            value='{\\n  \"host\": \"your-presto-host\",\\n  \"port\": 12345,\\n  \"user\": \"your-user\",\\n  \"password\": \"your-password\",\\n  \"catalog\": \"your-catalog\",\\n  \"schema\": \"your-schema\",\\n  \"ssl_verify\": \"/path/to/your/cert.pem\"\\n}'\n        ),\n        StrInput(\n            name=\"tool_name\",\n            display_name=\"Tool Name\",\n            info=\"The name of the tool to be passed to the LLM.\",\n            value=\"presto_query_tool\",\n        ),\n        StrInput(\n            name=\"tool_description\",\n            display_name=\"Tool Description\",\n            info=\"Describe the tool to the LLM. This helps the agent decide when to use it.\",\n            value=\"Runs a SQL query on a Presto database and returns the result as a JSON string.\",\n        ),\n    ]\n\n    outputs = [\n        Output(display_name=\"Tool\", name=\"tool\", method=\"build_tool\"),\n    ]\n\n    def create_tool_schema(self) -> Type[BaseModel]:\n        \"\"\"Create a Pydantic model for the tool's arguments.\"\"\"\n\n        class PrestoQuerySchema(BaseModel):\n            sql_query: str = Field(..., description=\"The SQL query to execute on the Presto database.\")\n\n        return PrestoQuerySchema\n\n    def _get_connection(self):\n        \"\"\"Gets a cached connection or creates a new one.\"\"\"\n        if self._connection and self._connection.closed:\n             self._connection = None\n\n        if self._connection:\n            return self._connection\n\n        connection_config = self.connection_config\n        if isinstance(connection_config, str):\n            try:\n                config = json.loads(connection_config)\n            except json.JSONDecodeError as e:\n                raise ValueError(f\"Invalid JSON in connection config: {e}\")\n        elif isinstance(connection_config, dict):\n            config = connection_config\n        else:\n            raise TypeError(f\"Unsupported type for connection_config: {type(connection_config)}\")\n\n        host = config.get(\"host\")\n        port = config.get(\"port\")\n        user = config.get(\"user\")\n        password = config.get(\"password\")\n        catalog = config.get(\"catalog\")\n        schema = config.get(\"schema\")\n        ssl_verify_path = config.get(\"ssl_verify\")\n\n        if not all([host, port, user, catalog, schema, ssl_verify_path]):\n            raise ValueError(\"Connection config is missing required fields.\")\n\n        session = requests.Session()\n        session.verify = ssl_verify_path\n        session.trust_env = False\n\n        try:\n            conn = dbapi.connect(\n                host=host,\n                port=port,\n                user=user,\n                catalog=catalog,\n                schema=schema,\n                http_scheme='https',\n                auth=auth.BasicAuthentication(user, password) if password else None,\n                http_session=session,\n            )\n            self._connection = conn\n            return self._connection\n        except Exception as e:\n            raise RuntimeError(f\"Failed to connect to Presto: {e}\") from e\n\n    def _run_tool(self, sql_query: str) -> str:\n        \"\"\"Executes a SQL query on the Presto database and returns the result.\"\"\"\n        self.status = f\"Executing query: {sql_query[:50]}...\"\n        conn = self._get_connection()\n\n        try:\n            cur = conn.cursor()\n            try:\n                cur.execute(sql_query)\n                rows = cur.fetchall()\n                columns = [desc[0] for desc in cur.description]\n            finally:\n                cur.close()\n            \n            df = pd.DataFrame(rows, columns=columns)\n            self.status = f\"Query successful: {len(rows)} rows\"\n            return df.to_json(orient=\"records\")\n        except Exception as e:\n            # Reset the connection on failure\n            self._connection = None\n            self.status = f\"Query failed: {e}\"\n            return f\"Error: Query failed with exception: {e}\"\n\n    def build_tool(self) -> Tool:\n        \"\"\"Builds the StructuredTool from the component's inputs.\"\"\"\n        tool_schema = self.create_tool_schema()\n        \n        tool = StructuredTool.from_function(\n            name=self.tool_name,\n            description=self.tool_description,\n            func=self._run_tool,\n            args_schema=tool_schema,\n            return_direct=False,\n        )\n        \n        self.status = \"Presto DB Tool created\"\n        return tool\n"
               },
               "connection_config": {
                 "_input_type": "CodeInput",
@@ -1722,15 +1728,15 @@
           "width": 320
         },
         "position": {
-          "x": -513.5457587229105,
-          "y": 181.37582447164422
+          "x": -509.3908426825128,
+          "y": 276.93889340079056
         },
-        "selected": true,
+        "selected": false,
         "type": "genericNode"
       }
     ],
     "viewport": {
-      "x": 376.8368495219052,
+      "x": 381.18473504488037,
       "y": 179.45167542027923,
       "zoom": 0.6150120883236009
     }
