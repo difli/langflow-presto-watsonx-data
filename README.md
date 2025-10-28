@@ -4,6 +4,46 @@ This project provides a custom component for [Langflow](https://langflow.org/) t
 
 ## Getting Started
 
+### Finding Your watsonx.data Credentials
+
+To connect to a watsonx.data instance on IBM Cloud, you first need to gather your credentials. This involves creating an IAM API key and finding your specific Presto connection details.
+
+**1. Create an IBM Cloud API Key**
+
+Navigate to the IAM API keys section in the IBM Cloud console to create a new key. This key will be used as the **password** for your connection.
+
+*   Go to **Manage** > **Access (IAM)** > **API keys**.
+*   Click **Create an IBM Cloud API key**.
+*   Give it a descriptive name and click **Create**.
+*   **Important:** Copy or download the API key immediately. You will not be able to see it again.
+
+![Create API Key](create-api-key.png)
+
+**2. Get Presto Connection Details**
+
+From the watsonx.data console, you can find the specific `host` and `port` for your Presto engine.
+
+*   Navigate to the **Infrastructure manager**.
+*   Find your Presto engine and click the three dots to select **Connection details**.
+
+![Get Presto Connection Details](get-presto-connection-details.png)
+
+**3. Configure the Langflow Component**
+
+Combine the details from the previous steps to configure the component in Langflow. The `user` is a combination of the string `ibmlhapikey_` and your IBM Cloud user ID (email).
+
+```json
+{
+  "host": "<your-presto-host>",
+  "port": <your-presto-port>,
+  "user": "ibmlhapikey_<your-user-id>",
+  "password": "<your-iam-api-key>",
+  "catalog": "<your-catalog>",
+  "schema": "<your-schema>",
+  "ssl_verify": "True"
+}
+```
+
 There are two ways to use these components:
 
 ### Option 1: Import the Example Flow (Easiest)
@@ -69,6 +109,22 @@ export NO_PROXY=<your-watsonx-data-host>
 ```
 
 **IMPORTANT:** These variables must be set in the *same terminal session* from which you will launch Langflow.
+
+#### Example Component Configuration for Self-Signed Certificates
+
+When configuring the component in Langflow for a server with a self-signed certificate, you must provide the path to the certificate file in the `ssl_verify` field. This is the typical setup for on-premises or other non-IBM Cloud deployments.
+
+```json
+{
+  "host": "<your-on-prem-host>",
+  "port": <your-presto-port>,
+  "user": "<your-user>",
+  "password": "<your-password>",
+  "catalog": "<your-catalog>",
+  "schema": "<your-schema>",
+  "ssl_verify": "/path/on/server/to/presto-chain.pem"
+}
+```
 
 ## Installation
 
